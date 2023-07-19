@@ -172,5 +172,3 @@ work_dir_lora/
 output/
 outputs/
 *.json
-dump/
-data/*
