@@ -43,16 +43,16 @@ Instruction tuning: Causal Language Model的语言生成过程
 
 ## Greedy Search
 
-![greedy_search](E:\ShuYe\LLm_training\src\greedy_search.png)
+![greedy_search](./src/greedy_search.png)
 
 ## Beam Search
 
-![greedy_search](E:\ShuYe\LLm_training\src\beam_search.png)
+![greedy_search](./src/beam_search.png)
 
 ## Top K Sampling 
 
-![top_k_sampling](E:\ShuYe\LLm_training\src\top_k_sampling.png)
+![top_k_sampling](./src/top_k_sampling.png)
 
 ## Top P Sampling
 
-![top_p_sampling](E:\ShuYe\LLm_training\src\top_p_sampling.png)
+![top_p_sampling](./src/top_p_sampling.png)
