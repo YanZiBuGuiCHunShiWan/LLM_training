@@ -55,15 +55,19 @@ output = tokenizer.decode(generate_ids[0][len(inputs.input_ids[0]):])
 
 ## Greedy Search
 
-​		贪心搜索每一步都只考虑当前的最优解，它容易陷入局部最优解。如果全局最优解在当前时刻的token的对应于一个比较低的概率，那么Greedy Search无法探索这些概率较低的路径。如下图，Greedy Search每一步只考虑当前最优计算得到的句子**The nice woman**的概率为**0.5✖0.4=0.2**，而另一个序列**The dog has**的概率是**0.4✖0.9=0.36**。
+贪心搜索每一步都只考虑当前的最优解，它容易陷入局部最优解。如果全局最优解在当前时刻的token的对应于一个比较低的概率，那么Greedy Search无法探索这些概率较低的路径。如下图，Greedy Search每一步只考虑当前最优计算得到的句子**The nice woman**的概率为**0.5✖0.4=0.2**，而另一个序列**The dog has**的概率是**0.4✖0.9=0.36**。
 
 ​                                   ![greedy_search](./src/greedy_search.png)
 
 ## Beam Search
 
+束搜索与Greedy Search类似，不同的是，束搜索每一步只考虑当前时刻token概率大小前Beamsize个的结果，即每一步保留固定数量的候选序列。Beam Search 生成的结果通常会缺乏多样性，处理较长的序列时，Beam Search 的空间复杂度会随着候选集大小和序列长度的增加而增加。
+
 ​                                   ![greedy_search](./src/beam_search.png)   
 
 ## Top K Sampling 
+
+Top K Sampling的文本生成方式就是从token的概率分布中进行采样，为了防止随机采样到一些概率极小的生僻词，选择从概率大小Top K的分布中进行采样。比如选择K=6，那么每一次生成新的token只会从由6个token构成的概率分布中采样得到，这种方式生成的文本内容就更加丰富。
 
 ![top_k_sampling](./src/top_k_sampling.png)
 
