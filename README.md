@@ -41,13 +41,27 @@ Instruction tuning: Causal Language Model的语言生成过程
 
 ```图片源自```[Huggingface blog](https://huggingface.co/blog/how-to-generate)
 
+```python
+generation_config = GenerationConfig(
+        temperature=0.6,
+        top_p=0.8,
+        do_sample=True,
+        repetition_penalty=2.0,
+        max_new_tokens=512,  # max_length=max_new_tokens+input_sequence
+    )
+generate_ids = model.generate(**inputs, generation_config=generation_config)
+output = tokenizer.decode(generate_ids[0][len(inputs.input_ids[0]):])
+```
+
 ## Greedy Search
 
-![greedy_search](./src/greedy_search.png)
+​		贪心搜索每一步都只考虑当前的最优解，它容易陷入局部最优解。如果全局最优解在当前时刻的token的对应于一个比较低的概率，那么Greedy Search无法探索这些概率较低的路径。如下图，Greedy Search每一步只考虑当前最优计算得到的句子**The nice woman**的概率为$0.5\times0.4=0.2$，而另一个序列**The dog has**的概率是$0.4\times 0.9=0.36$。
+
+​                                   ![greedy_search](./src/greedy_search.png)
 
 ## Beam Search
 
-![greedy_search](./src/beam_search.png)
+​                                   ![greedy_search](./src/beam_search.png)   
 
 ## Top K Sampling 
 
