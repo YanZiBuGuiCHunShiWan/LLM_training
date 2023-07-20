@@ -18,12 +18,14 @@
 
 ## SFT-Datasets
 
-- [Belle_open_source_500k](https://huggingface.co/datasets/BelleGroup/train_0.5M_CN/blob/main/Belle_open_source_0.5M.json)```单轮对话```
+- [Belle_open_source_500k](https://huggingface.co/datasets/BelleGroup/train_0.5M_CN/blob/main/Belle_open_source_0.5M.json)```单轮对话```：包含约50万条由[BELLE](https://github.com/LianjiaTech/BELLE)项目生成的中文指令数据。
 - [Firefly-train-1.1M](https://huggingface.co/datasets/YeungNLP/firefly-train-1.1M)```单论对话```：23种常见的中文NLP任务的数据，并且构造了许多与中华文化相关的数据，如对联、作诗、文言文翻译、散文、金庸小说等。对于每个任务，由人工书写若干种指令模板，保证数据的高质量与丰富度，数据量为115万
 
-- [Moss-003-sft-data](https://huggingface.co/datasets/YeungNLP/moss-003-sft-data)```多论对话```
-- [Safety-prompts](https://github.com/thu-coai/Safety-Prompts)```单论对话```
-- [WebNovel]()```单论对话```
+- [Moss-003-sft-data](https://huggingface.co/datasets/YeungNLP/moss-003-sft-data)```多论对话```：由复旦大学MOSS团队开源的中英文多轮对话数据，包含100万+数据
+
+- [Safety-prompts](https://github.com/thu-coai/Safety-Prompts)```单论对话```：包括100k条中文安全场景的prompts和ChatGPT的回复，涵盖了各类安全场景和指令攻击，可以用于全面评测和提升模型的安全性，也可以用于增强模型关于安全方面的知识，对齐模型输出和人类价值观。
+
+  
 
 
 
