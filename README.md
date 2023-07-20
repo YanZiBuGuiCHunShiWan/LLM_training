@@ -34,3 +34,25 @@
 Instruction tuning: Causal Language Model的语言生成过程
 
 ![!generate](./src/clm.gif)
+
+
+
+# 文本生成策略
+
+```图片源自```[Huggingface blog](https://huggingface.co/blog/how-to-generate)
+
+## Greedy Search
+
+![greedy_search](E:\ShuYe\LLm_training\src\greedy_search.png)
+
+## Beam Search
+
+![greedy_search](E:\ShuYe\LLm_training\src\beam_search.png)
+
+## Top K Sampling 
+
+![top_k_sampling](E:\ShuYe\LLm_training\src\top_k_sampling.png)
+
+## Top P Sampling
+
+![top_p_sampling](E:\ShuYe\LLm_training\src\top_p_sampling.png)
