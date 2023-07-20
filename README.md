@@ -16,6 +16,8 @@
 
 # 支持训练数据集
 
+```需要将数据下载到本地读取```
+
 ## SFT-Datasets
 
 - [Belle_open_source_500k](https://huggingface.co/datasets/BelleGroup/train_0.5M_CN/blob/main/Belle_open_source_0.5M.json)```单轮对话```：包含约50万条由[BELLE](https://github.com/LianjiaTech/BELLE)项目生成的中文指令数据。
@@ -27,6 +29,8 @@
 
   
 
+# **解析**
 
+Instruction tuning: Causal Language Model的语言生成过程
 
-# 
+![!generate](https://github.com/YanZiBuGuiCHunShiWan/LLM_training/src/clm.gif)
