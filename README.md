@@ -33,4 +33,4 @@
 
 Instruction tuning: Causal Language Model的语言生成过程
 
-![!generate](https://github.com/YanZiBuGuiCHunShiWan/LLM_training/src/clm.gif)
+![!generate](./src/clm.gif)
