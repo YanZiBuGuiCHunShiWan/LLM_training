@@ -6,105 +6,90 @@ from transformers import Trainer, TrainingArguments, HfArgumentParser, set_seed
 from peft import (
     LoraConfig,
     get_peft_model,
+    PromptEncoderConfig
     
 )
 from dataclasses import field, fields, dataclass
 import bitsandbytes as bnb
-from modeling.model import load_model
+from modeling.model import load_model,find_all_linear_modules
 from utils.generate_data import OpenSourceDataGen
 from loguru import logger
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union,Optional
 os.environ["CUDA_VISIBLE_DEVICES"]='1,2,3'
 
 VAL_SET_SIZE=200
 
 @dataclass
 class FinetuneArguments:
-    model_name_or_path: str = ""
-    data_path: str = ""
-    test_size: float = 0.2
-    tuning_task: str = "safety_prompts"
-    lora_rank: int = 8
-    lora_target_modules: str = ""
-    quantization: str = "4bit"
-    model_output_dir: str = ""
+    '''
+    微调参数设置
+    '''
+    #通用参数设置
+    peft_type: str = field()
+    model_name_or_path: str = field()
+    model_type: str = field()
+    train_file: str = field(default="data/sft_data/Safetyprompts/typical_safety_scenarios.json")
+    test_size: float = field(default=0.2)
+    quantization: str = field(default=None)
+    
+    #LoRA参数设置
+    lora_rank: Optional[int] = field(default=8)
+    lora_dropout: Optional[int] = field(default=0.1)
+    lora_alpha: Optional[int] = field(default=16, metadata={"help": "lora alpha"})
+    
+    #P-Tuning参数设置
+    num_virtual_tokens: Optional[int] = field(default=20)
+    encoder_hidden_size: Optional[int] = field(default=128)
+    
+def setup_everything():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train_args_file", type=str, default='config/lora_config.json', help="")
+    args = parser.parse_args()
+    train_args_file = args.train_args_file
+    # 读取训练的参数配置
+    parser = HfArgumentParser((FinetuneArguments, TrainingArguments))
+    # 解析得到自定义参数，以及自带参数
+    args, training_args = parser.parse_json_file(json_file=train_args_file)
+    # 创建输出目录
+    if not os.path.exists(training_args.output_dir):
+        os.makedirs(training_args.output_dir)
+    set_seed(training_args.seed)
+    return args, training_args
 
-def parse_args():
-    parse=argparse.ArgumentParser(description="Arguments for model training.")
-    parse.add_argument("--model_type",default="baichuan",type=str,choices=["chatglm","baichuan","moss"])
-    parse.add_argument("--model_path",type=str,default="../ptm/baichuan")
-    parse.add_argument("--model_output_dir",type=str,default="dump/baichuan6b-sft")
-    parse.add_argument("--test_size",default=0.2,type=float)
-    parse.add_argument("--lora_rank",default=8,type=int)
-    parse.add_argument("--quantization",default="4bit",type=str)
-    parse.add_argument("--data_path",default="data/Safetyprompts/typical_safety_scenarios.json",type=str)
-    parse.add_argument("--lora_target_modules",default=None)
-    args=parse.parse_args()
-    return args
 
-################ find modules that can be trained by lora ################  
-def find_all_linear_modules(model):
-    cls=bnb.nn.Linear4bit
-    lora_target_modules=set()
-    for names,module in model.named_modules():
-        if isinstance(module,cls):
-            names=names.split(".")
-            lora_target_modules.add(names[0] if len(names)==1 else names[-1])
-            
-    if 'lm_head' in lora_target_modules: # needed for 16-bit
-        lora_target_modules.remove('lm_head')
-    return list(lora_target_modules)
-        
 def main():
-    # args=HfArgumentParser(
-    #     FinetuneArguments
-    # ).parse_args_into_dataclasses
-    args=parse_args()
+    args,training_args=setup_everything()
     set_seed(42)
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     local_rank = int(os.environ.get("LOCAL_RANK", 1))
     logger.info(f"world size {world_size} local rank {local_rank}")
     
     #################### wrap model with peft #####################
-    model,tokenizer=load_model(args.model_type,args.model_path,args.quantization,local_rank)
-    lora_target_modules=args.lora_target_modules.splt(",") if args.lora_target_modules is not None else find_all_linear_modules(model)
-    config=LoraConfig(
-        task_type="CAUSAL_LM",
-        inference_mode=False,
-        r=args.lora_rank,
-        lora_alpha=16,
-        lora_dropout=0.1,
-        target_modules=lora_target_modules
-    )
+    model,tokenizer=load_model(args.model_type,args.model_name_or_path,args.quantization,local_rank)
+    if args.peft_type=="lora":
+        lora_target_modules=find_all_linear_modules(model)
+        config=LoraConfig(
+            task_type="CAUSAL_LM",
+            inference_mode=False,
+            r=args.lora_rank,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            target_modules=lora_target_modules
+        )
     model=get_peft_model(model,config)
-    model.print_trainable_parameters()
+    if local_rank==1:
+        model.print_trainable_parameters()
     #################### prepare data for training ################
     
     datagenerator=OpenSourceDataGen(tokenizer=tokenizer)
-    train_dataset,valid_dataset=datagenerator.generate_train_test_data(datapath=args.data_path,field="Mental_Health",test_size=args.test_size)
+    train_dataset,valid_dataset=datagenerator.generate_train_test_data(datapath=args.train_file,field="all",test_size=args.test_size)
     
     #################### start training ###########################    
     trainer=Trainer(
         model=model,
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
-        args=TrainingArguments(
-            num_train_epochs=2,
-            per_device_train_batch_size=2,
-            per_device_eval_batch_size=1,
-            learning_rate=3e-4,
-            gradient_accumulation_steps=4,
-            evaluation_strategy="steps" if VAL_SET_SIZE > 0 else "no",
-            save_strategy="steps",
-            eval_steps=100 if VAL_SET_SIZE > 0 else None,
-            save_steps=100,
-            output_dir=args.model_output_dir,
-            report_to = "tensorboard",
-            save_total_limit=3,
-            load_best_model_at_end=True if VAL_SET_SIZE > 0 else False,
-            optim="adamw_torch",
-            ddp_find_unused_parameters=False #如果启用多卡并行，得设置为False,如果gradient_checkpointing 是"used"
-            ),
+        args=training_args,
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer=tokenizer,
             pad_to_multiple_of=8,
@@ -113,7 +98,7 @@ def main():
         )
     )
     trainer.train(resume_from_checkpoint=False)
-    model.save_pretrained(args.model_output_dir)
+    model.save_pretrained(args.output_dir)
 
 
 if __name__=="__main__":

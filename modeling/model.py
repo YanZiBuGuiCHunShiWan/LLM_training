@@ -3,7 +3,9 @@ import torch
 from typing import *
 import copy
 import torch.nn as nn
+import bitsandbytes as bnb
 from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import Seq2SeqTrainer,Seq2SeqTrainingArguments
 from loguru import logger
 from peft import prepare_model_for_kbit_training
 from transformers.utils import check_min_version
@@ -11,11 +13,26 @@ from transformers.utils.versions import require_version
 
 check_min_version('4.29.1')
 
+################ find modules that can be trained by lora ################  
+def find_all_linear_modules(model):
+    cls=bnb.nn.Linear4bit
+    lora_target_modules=set()
+    for names,module in model.named_modules():
+        if isinstance(module,cls):
+            names=names.split(".")
+            lora_target_modules.add(names[0] if len(names)==1 else names[-1])
+            
+    if 'lm_head' in lora_target_modules: # needed for 16-bit
+        lora_target_modules.remove('lm_head')
+    return list(lora_target_modules)
+        
+
 def load_model(model_type,model_name_or_path,quantization=None,local_rank=None):
     tokenizer=AutoTokenizer.from_pretrained(model_name_or_path,trust_remote_code=True)
     device_map={"":torch.cuda.current_device()}
     local_rank=os.environ.get('LOCAL_RANK',local_rank)
     if "baichuan" in model_type.lower():
+        logger.info("Baichuan.............")
         AutoLoader=AutoModelForCausalLM
     elif "chatglm" in model_type.lower():
         AutoLoader=AutoModel

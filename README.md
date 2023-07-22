@@ -103,6 +103,14 @@ Top P Sampling是从累积概率超过概率p的最少的单词集合中进行�
 
 可以明显地感受到模型微调前后的回答差距，基座模型无法正常和人类对话，微调后的模型回答效果进步显著，但是还是有一些瑕疵。```超参数对生成结果影响较大,如果发现生成的文本出现标点符号不太对劲等情况可以调整超参数。```
 
+# 运行
+
+创建shell脚本复制粘贴如下内容，然后```sh run.sh```
+
+```shell
+CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node 4 train_sft.py --train_args_file config/lora_config.json
+```
+
 
 
 # 未来计划
