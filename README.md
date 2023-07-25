@@ -3,6 +3,7 @@
 # 支持模型
 
 - [Baichuan7B/13B](https://github.com/baichuan-inc/Baichuan-7B)
+- **LLama系列**
 - [Moss16B](https://github.com/OpenLMLab/MOSS)
 - [ChatGLM/ChatGLM2](https://github.com/THUDM/ChatGLM-6B)
 
@@ -26,8 +27,6 @@
 - [Moss-003-sft-data](https://huggingface.co/datasets/YeungNLP/moss-003-sft-data)```多论对话```：由复旦大学MOSS团队开源的中英文多轮对话数据，包含100万+数据
 
 - [Safety-prompts](https://github.com/thu-coai/Safety-Prompts)```单论对话```：包括100k条中文安全场景的prompts和ChatGPT的回复，涵盖了各类安全场景和指令攻击，可以用于全面评测和提升模型的安全性，也可以用于增强模型关于安全方面的知识，对齐模型输出和人类价值观。
-
-  
 
 # **解析**
 
@@ -132,7 +131,6 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node 4 train_sft.py --train_ar
 
 # 未来计划
 
-- [ ] Reward Model Trainig
 - [ ] RLHF Training
 - [ ] Model  --->  ONNX
 - [ ] C++  Inference Implementation
