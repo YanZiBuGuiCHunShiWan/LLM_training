@@ -3,7 +3,8 @@
 # 支持模型
 
 - [Baichuan7B/13B](https://github.com/baichuan-inc/Baichuan-7B)
-- **LLama系列**
+- [**LLama系列**](https://huggingface.co/meta-llama)
+- [**Bloom系列**](https://huggingface.co/bigscience)
 - [Moss16B](https://github.com/OpenLMLab/MOSS)
 - [ChatGLM/ChatGLM2](https://github.com/THUDM/ChatGLM-6B)
 
