@@ -31,15 +31,12 @@ class FinetuneArguments:
     train_file: str = field(default="data/sft_data/Safetyprompts/typical_safety_scenarios.json")
     test_size: float = field(default=0.2)
     quantization: str = field(default=None)
-    
+    max_seq_length: int = field(default=1024)
     #LoRA参数设置
     lora_rank: Optional[int] = field(default=8)
     lora_dropout: Optional[int] = field(default=0.1)
     lora_alpha: Optional[int] = field(default=16, metadata={"help": "lora alpha"})
     
-    #P-Tuning参数设置
-    num_virtual_tokens: Optional[int] = field(default=20)
-    encoder_hidden_size: Optional[int] = field(default=128)
     
 def setup_everything():
     parser = argparse.ArgumentParser()
@@ -80,8 +77,7 @@ def main():
     if local_rank==1:
         model.print_trainable_parameters()
     #################### prepare data for training ################
-    
-    datagenerator=OpenSourceDataGen(tokenizer=tokenizer)
+    datagenerator=OpenSourceDataGen(tokenizer=tokenizer,Max_seq_length=args.max_seq_length)
     train_dataset,valid_dataset=datagenerator.generate_train_test_data(datapath=args.train_file,field="all",test_size=args.test_size)
     
     #################### start training ###########################    
@@ -98,7 +94,7 @@ def main():
         )
     )
     trainer.train(resume_from_checkpoint=False)
-    model.save_pretrained(args.output_dir)
+    model.save_pretrained(training_args.output_dir)
 
 
 if __name__=="__main__":
