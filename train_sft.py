@@ -7,12 +7,11 @@ from peft import (
     LoraConfig,
     get_peft_model,
     PromptEncoderConfig
-    
 )
 from dataclasses import field, fields, dataclass
 import bitsandbytes as bnb
 from modeling.model import load_model,find_all_linear_modules
-from utils.generate_data import OpenSourceDataGen
+from utils.generate_sft_data import OpenSourceDataGen
 from loguru import logger
 from typing import Dict, List, Tuple, Union,Optional
 os.environ["CUDA_VISIBLE_DEVICES"]='1,2,3'
