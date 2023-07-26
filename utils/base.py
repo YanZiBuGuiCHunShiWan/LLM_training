@@ -23,20 +23,20 @@ class CustomDatasets(object):
         result = self.tokenizer(
         prompt,
         truncation=True,
-        max_length=self.Max_seq_length,
+        max_length=self.Max_seq_len,
         padding=False
     )
         if (
                 result["input_ids"][-1] != self.tokenizer.eos_token_id
-                and len(result["input_ids"]) < self.Max_seq_length
+                and len(result["input_ids"]) < self.Max_seq_len
                 and add_eos_token
         ):
             result["input_ids"].append(self.tokenizer.eos_token_id)
             result["attention_mask"].append(1)
 
-        if add_eos_token and len(result["input_ids"]) >= self.Max_seq_length:
-            result["input_ids"][self.Max_seq_length - 1] = self.tokenizer.eos_token_id
-            result["attention_mask"][self.Max_seq_length - 1] = 1
+        if add_eos_token and len(result["input_ids"]) >= self.Max_seq_len:
+            result["input_ids"][self.Max_seq_len - 1] = self.tokenizer.eos_token_id
+            result["attention_mask"][self.Max_seq_len - 1] = 1
 
         result["labels"] = result["input_ids"].copy()
         return result
@@ -57,3 +57,33 @@ class CustomDatasets(object):
     def generate_train_test_data(self):
         
         raise NotImplementedError
+    
+    
+class RawSample(TypedDict, total=False):
+    """Raw sample type.
+
+    stage1: For SupervisedDataset, should provide (input, answer) or (dialogue).
+    stage2: For PreferenceDataset, should provide (input, answer, other_answer, better).
+
+    When input is a list, it would be processed as a dialogue.
+    """
+
+    # Texts
+    input: NotRequired[str | list[str]]  # either `input` or `dialogue` should be provided
+    """User input text."""
+    answer: NotRequired[str]
+    """Assistant answer text."""
+    other_answer: NotRequired[str]
+    """Other assistant answer text via resampling."""
+    dialogue: NotRequired[list[str]]  # either `input` or `dialogue` should be provided
+    """Dialogue history."""
+
+    # Flags
+    better: NotRequired[bool]
+    """Whether ``answer`` is better than ``other_answer``."""
+    safer: NotRequired[bool]
+    """Whether ``answer`` is safer than ``other_answer``."""
+    is_safe: NotRequired[bool]
+    """Whether ``answer`` is safe."""
+    is_other_safe: NotRequired[bool]
+    """Whether ``other_answer`` is safe."""

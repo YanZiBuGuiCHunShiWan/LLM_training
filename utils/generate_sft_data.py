@@ -4,6 +4,7 @@ import jsonlines,transformers
 from datasets import load_dataset,Dataset
 from torch.utils.data import DataLoader as DL,Dataset as DS
 from loguru import logger
+from transformers import AutoTokenizer
 from config.constants import SAFETY_PROMPT_FIELDS,PROMPT_DICT
 from utils.base import CustomDatasets
 from typing_extensions import TypedDict
@@ -20,12 +21,6 @@ class OpenSourceDataGen(CustomDatasets):
         然后再用map函数按照指定的方式处理数据得到dataset(根据需求选择是否过滤数据),dataset种每一条数据如下:
         {"input_ids":xxxxxx,"attention_mask":xxxxxx,"labels":xxxxxx}
     '''
-    def __init__(self,tokenizer: transformers.AutoTokenizer,Max_seq_length: int):
-        self.tokenizer=tokenizer
-        self.__Safetyprompts_fields=SAFETY_PROMPT_FIELDS
-        self.Max_seq_length=Max_seq_length
-        self.prompt_dict=PROMPT_DICT
-        
     @staticmethod    
     def is_contains_chinese(strs):
         for _char in strs:
@@ -58,7 +53,7 @@ class OpenSourceDataGen(CustomDatasets):
     def generate_multiturn_tokenize(self,data_dict):
         curr_content="<s>"
         for dict_info in data_dict["conversation"]:
-            curr_content+="Human: "+dict_info["human"]+"\n\nAssistant: "+dict_info["assistant"]+"</s>"
+            curr_content+=PROMPT_DICT["prompt_input"].format(dict_info["human"],dict_info["assistant"])+"</s>"
         return self.tokenize(prompt=curr_content)
     
     
