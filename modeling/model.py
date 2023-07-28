@@ -141,6 +141,7 @@ def load_model(finetune_args: FinetuneArguments,local_rank=None):
             torch_dtype=torch.float16,
             trust_remote_code=True,
         )
+
     
      # Enable model parallelism.
     # 设置两个和并行操作相关的参数
@@ -148,6 +149,8 @@ def load_model(finetune_args: FinetuneArguments,local_rank=None):
     setattr(model, 'is_parallelizable', True)
 
     model=prepare_model_for_training(model,finetuning_type=finetune_args.finetuning_type)
+    if finetune_args.finetuning_type=="full":
+        model=model.float()
     padding_side="right"
     if finetune_args.training_stage=="rm":
         padding_side="left"

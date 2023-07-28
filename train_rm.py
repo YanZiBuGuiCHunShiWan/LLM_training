@@ -53,7 +53,7 @@ def main():
             lora_dropout=args.lora_dropout,
             target_modules=lora_target_modules
          )
-    model=get_peft_model(model,loraconfig)
+        model=get_peft_model(model,loraconfig)
 
     #################### prepare data for training ###########################
     datagenerator=RMDataGen(tokenizer=tokenizer,Max_seq_len=args.max_seq_length)
