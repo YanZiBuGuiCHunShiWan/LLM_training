@@ -5,9 +5,7 @@ import copy
 import torch.nn as nn
 import bitsandbytes as bnb
 from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,PreTrainedModel,AutoConfig
-from transformers import Seq2SeqTrainer,Seq2SeqTrainingArguments
 from loguru import logger
-from peft import prepare_model_for_kbit_training
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 from trl import AutoModelForCausalLMWithValueHead
@@ -18,7 +16,7 @@ check_min_version('4.29.1')
 
 ################ find modules that can be trained by lora #######################  
 def find_all_linear_modules(model,quantization="4bit"):
-    assert quantization in ["4bit","8bit",None]
+    assert quantization in ["4bit","8bit",False,None]
     if quantization=="4bit":
         cls=bnb.nn.Linear4bit
     elif quantization=="8bit":
@@ -33,6 +31,10 @@ def find_all_linear_modules(model,quantization="4bit"):
             
     if 'lm_head' in lora_target_modules: # needed for 16-bit
         lora_target_modules.remove('lm_head')
+    if "summary" in lora_target_modules:
+        lora_target_modules.remove("summary")
+    if '0'in lora_target_modules:
+        lora_target_modules.remove('0')
     return list(lora_target_modules)
 ##################################################################################
 
