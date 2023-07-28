@@ -16,8 +16,6 @@ from modeling.loss import PairwiseRMLoss
 from config.args import FinetuneArguments
 os.environ["CUDA_VISIBLE_DEVICES"]='1,2,3'
 
-VAL_SET_SIZE=200
-
     
 def setup_everything():
     parser = argparse.ArgumentParser()
@@ -45,9 +43,8 @@ def main():
     #################### wrap model with peft #####################
     model,tokenizer=load_model(args,local_rank)
     if args.finetuning_type=="lora":
-        lora_target_modules=find_all_linear_modules(model)
-        #lora_target_modules=["W_pack","o_proj","gate_proj","up_proj","down_proj"]
-        lora_target_modules=["query_key_value","self_attention.dense","mlp.dense"]
+        lora_target_modules=find_all_linear_modules(model,quantization=args.quantization)
+        logger.info("target modules:{}.".format(lora_target_modules))
         loraconfig=LoraConfig(
             task_type="CAUSAL_LM",
             inference_mode=False,
