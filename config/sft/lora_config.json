@@ -1,5 +1,6 @@
 {   
-    "peft_type":"lora",
+    "training_stage":"sft",
+    "finetuning_type":"lora",
     "output_dir": "dump/LLama2-wholetoken-multiturn-sft",
     "model_name_or_path": "/data/LLama2-7b",
     "model_type":"baichuan",

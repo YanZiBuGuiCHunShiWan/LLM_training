@@ -9,9 +9,9 @@ __all__=[
 ]
 
 class TokenizedSample(TypedDict,total=True):
-    input_ids: list
-    labels: list
-    attention_mask: list
+    input_ids: list[int]
+    labels: list[int]
+    attention_mask: list[int]
 
 class CustomDatasets(object):
     
@@ -62,7 +62,7 @@ class CustomDatasets(object):
 class RawSample(TypedDict, total=False):
     """Raw sample type.
 
-    stage1: For SupervisedDataset, should provide (input, answer) or (dialogue).
+    stage1: For SupervisedDataset, should provide (single turn dialogue) or (multi-turn dialogue).
     stage2: For PreferenceDataset, should provide (input, answer, other_answer, better).
 
     When input is a list, it would be processed as a dialogue.

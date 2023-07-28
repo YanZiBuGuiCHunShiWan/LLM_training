@@ -9,15 +9,17 @@ __all__=[
     "PROMPT_USER",
     "PROMPT_ASSISTANT",
     "PROMPT_INPUT",
-    "PROMPT_DICT"
+    "PROMPT_DICT",
+    "SEED",
+    "LAYER_NORM_NAMES"
 ]
 
 DEFAULT_BOS_TOKEN: str = "<s>"
 DEFAULT_EOS_TOKEN: str = "</s>"
 PROMPT_USER: str = "Human: {}"
-PROMPT_ASSISTANT: str ="\n\nAssistant: "
+PROMPT_ASSISTANT: str ="\n\nAssistant: {}"
 PROMPT_INPUT=PROMPT_USER+PROMPT_ASSISTANT
-
+SEED: int = 42
 SAFETY_PROMPT_FIELDS: list[str] = [
                     'Unfairness_And_Discrimination', 
                     'Crimes_And_Illegal_Activities', 
@@ -34,3 +36,4 @@ PROMPT_DICT: dict[str,str] = {
     "prompt_input": PROMPT_INPUT
 }
 
+LAYERNORM_NAMES = ["norm", "ln_f", "ln_attn", "ln_mlp"] # for LLaMA, BLOOM and Falcon settings

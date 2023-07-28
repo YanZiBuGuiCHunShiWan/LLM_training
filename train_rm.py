@@ -1,18 +1,18 @@
 import torch
 import os
 import argparse
-import transformers
-from transformers import Trainer, TrainingArguments, HfArgumentParser, set_seed
+from transformers import Trainer, TrainingArguments, HfArgumentParser,set_seed
 from peft import (
     LoraConfig,
     get_peft_model,
-    PromptEncoderConfig
 )
-from dataclasses import field, fields, dataclass
 import bitsandbytes as bnb
 from modeling.model import load_model,find_all_linear_modules
-from utils.generate_sft_data import OpenSourceDataGen
+from utils.generate_rm_data import RMDataGen,PairwiseDataCollatorWithPadding
 from loguru import logger
+from typing import Optional
+from modeling.score_model.pairwise_model import PairwiseRewardModelTrainer
+from modeling.loss import PairwiseRMLoss
 from config.args import FinetuneArguments
 os.environ["CUDA_VISIBLE_DEVICES"]='1,2,3'
 
@@ -45,31 +45,33 @@ def main():
     #################### wrap model with peft #####################
     model,tokenizer=load_model(args,local_rank)
     if args.finetuning_type=="lora":
-        lora_target_modules=find_all_linear_modules(model,quantization=args.quantization)
-        config=LoraConfig(
+        lora_target_modules=find_all_linear_modules(model)
+        #lora_target_modules=["W_pack","o_proj","gate_proj","up_proj","down_proj"]
+        lora_target_modules=["query_key_value","self_attention.dense","mlp.dense"]
+        loraconfig=LoraConfig(
             task_type="CAUSAL_LM",
             inference_mode=False,
             r=args.lora_rank,
             lora_alpha=args.lora_alpha,
             lora_dropout=args.lora_dropout,
             target_modules=lora_target_modules
-        )
-    model=get_peft_model(model,config)
-    if local_rank==1:
-        model.print_trainable_parameters()
-    #################### prepare data for training ################
-    datagenerator=OpenSourceDataGen(tokenizer=tokenizer,Max_seq_len=args.max_seq_length)
-    train_dataset,valid_dataset=datagenerator.generate_train_test_data(datapath=args.train_file,field="all",test_size=args.test_size)
-    
-    #################### start training ###########################    
-    trainer=Trainer(
+         )
+    model=get_peft_model(model,loraconfig)
+
+    #################### prepare data for training ###########################
+    datagenerator=RMDataGen(tokenizer=tokenizer,Max_seq_len=args.max_seq_length)
+    train_dataset,valid_dataset=datagenerator.generate_train_test_data(datapath=args.train_file,test_size=args.test_size)
+    #################### instantiate loss function ###########################
+    loss_func=PairwiseRMLoss()
+    #################### start training ######################################
+    trainer=PairwiseRewardModelTrainer(
         model=model,
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
         args=training_args,
-        data_collator=transformers.DataCollatorForSeq2Seq(
+        compute_loss=loss_func,
+        data_collator=PairwiseDataCollatorWithPadding(
             tokenizer=tokenizer,
-            pad_to_multiple_of=8,
             return_tensors="pt",
             padding=True
         )

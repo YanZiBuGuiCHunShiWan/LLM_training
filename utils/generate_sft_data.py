@@ -58,12 +58,12 @@ class OpenSourceDataGen(CustomDatasets):
     
     
     def load_safety_prompts(self,data_path,field):
-        assert field in self.__Safetyprompts_fields,"please check the field name."
+        assert field in SAFETY_PROMPT_FIELDS,"please check the field name."
         if field.lower()!="all":
             dataset=load_dataset("json",data_files=data_path,field=field,split="train")
         else:
             def tmp_gen():
-                for field_name in self.__Safetyprompts_fields[:-1]:
+                for field_name in SAFETY_PROMPT_FIELDS[:-1]:
                     datafile=load_dataset("json",data_files=data_path,field=field_name,split="train")
                     for j in datafile:
                         yield j #j: {"prompt":"xxx","response":"xxx","type":"xxx"}
@@ -96,7 +96,7 @@ class OpenSourceDataGen(CustomDatasets):
         if data_name.lower()=="belle":
             logger.info("loading Belle.....")
             dataset=self.load_belle_cn_50(datapath)
-            column_names=None
+            column_names=dataset.column_names
         elif data_name.lower()=="firefly":
             logger.info("loading firefly........")
             dataset=self.load_firefly(datapath)
