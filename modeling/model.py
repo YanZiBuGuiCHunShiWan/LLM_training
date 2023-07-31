@@ -29,7 +29,7 @@ def find_all_linear_modules(model,quantization="4bit"):
             names=names.split(".")
             lora_target_modules.add(names[0] if len(names)==1 else names[-1])
             
-    if 'lm_head' in lora_target_modules: # needed for 16-bit
+    if 'lm_head' in lora_target_modules: 
         lora_target_modules.remove('lm_head')
     if "summary" in lora_target_modules:
         lora_target_modules.remove("summary")
@@ -74,9 +74,9 @@ def prepare_model_for_training(
     return model
         
 
-def load_model(finetune_args: FinetuneArguments,local_rank=None):
+def load_model(finetune_args: FinetuneArguments,local_rank=None,inference=False):
     
-    config=AutoConfig.from_pretrained(finetune_args.model_name_or_path)
+    config=AutoConfig.from_pretrained(finetune_args.model_name_or_path,trust_remote_code=True)
     device_map={"":torch.cuda.current_device()}
     local_rank=os.environ.get('LOCAL_RANK',local_rank)
     
@@ -147,14 +147,14 @@ def load_model(finetune_args: FinetuneArguments,local_rank=None):
     # 设置两个和并行操作相关的参数
     setattr(model, 'model_parallel', True)
     setattr(model, 'is_parallelizable', True)
-
-    model=prepare_model_for_training(model,finetuning_type=finetune_args.finetuning_type)
+    if not inference:
+        model=prepare_model_for_training(model,finetuning_type=finetune_args.finetuning_type)
     if finetune_args.finetuning_type=="full":
         model=model.float()
     padding_side="right"
     if finetune_args.training_stage=="rm":
         padding_side="left"
-        model=AutoModelForCausalLMWithValueHead.from_pretrained(model)
+        model=AutoModelForCausalLMWithValueHead.from_pretrained(model,trust_remote_code=True)
     
     tokenizer=AutoTokenizer.from_pretrained(finetune_args.model_name_or_path,
                                             trust_remote_code=True,
