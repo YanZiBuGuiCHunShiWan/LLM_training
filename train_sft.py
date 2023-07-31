@@ -5,20 +5,16 @@ import transformers
 from transformers import Trainer, TrainingArguments, HfArgumentParser, set_seed
 from peft import (
     LoraConfig,
-    get_peft_model,
-    PromptEncoderConfig
+    get_peft_model
 )
-from dataclasses import field, fields, dataclass
-import bitsandbytes as bnb
+from modeling.sft_model.sftmodel import SFTTrainer
+from modeling.loss import ShiftLabelMaskLoss
 from modeling.model import load_model,find_all_linear_modules
 from utils.generate_sft_data import OpenSourceDataGen
 from loguru import logger
 from config.args import FinetuneArguments
 os.environ["CUDA_VISIBLE_DEVICES"]='1,2,3'
 
-VAL_SET_SIZE=200
-
-    
 def setup_everything():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train_args_file", type=str, default='config/lora_config.json', help="")
@@ -61,12 +57,14 @@ def main():
     datagenerator=OpenSourceDataGen(tokenizer=tokenizer,Max_seq_len=args.max_seq_length)
     train_dataset,valid_dataset=datagenerator.generate_train_test_data(datapath=args.train_file,field="all",test_size=args.test_size)
     
+    loss=ShiftLabelMaskLoss(ignore_index=tokenizer.pad_token_id)    
     #################### start training ###########################    
-    trainer=Trainer(
+    trainer=SFTTrainer(
         model=model,
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
         args=training_args,
+        compute_loss=loss,
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer=tokenizer,
             pad_to_multiple_of=8,

@@ -22,10 +22,10 @@ PROMPT_INPUT=PROMPT_USER+PROMPT_ASSISTANT
 SEED: int = 42
 SAFETY_PROMPT_FIELDS: list[str] = [
                     'Unfairness_And_Discrimination', 
-                    'Crimes_And_Illegal_Activities', 
-                    'Insult', 
+                    #'Crimes_And_Illegal_Activities', 
+                    #'Insult', 
                     'Mental_Health',
-                    'Physical_Harm', 
+                    #'Physical_Harm', 
                     'Privacy_And_Property',
                     'Ethics_And_Morality',
                     "all"]

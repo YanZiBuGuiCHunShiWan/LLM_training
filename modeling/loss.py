@@ -1,5 +1,6 @@
 from __future__ import annotations
 import torch
+import abc
 import torch.nn as nn
 
 __all__=[
@@ -14,6 +15,7 @@ class Loss(object):
     """
     所有loss的类父类
     """
+    @abc.abstractmethod
     def __call__(self, model, inputs, return_outputs=False):
         raise NotImplemented
 
@@ -28,7 +30,7 @@ class ShiftLabelMaskLoss(Loss):
     def __call__(self, model, inputs,return_outputs=False):
         input_ids = inputs['input_ids']
         attention_mask = inputs['attention_mask']
-        target_mask = inputs['target_mask']
+        target_mask = inputs['labels']
         #forward
         outputs = model(input_ids=input_ids, attention_mask=attention_mask, return_dict=True) 
         #[Batch_size,seqlnegth,vocab_size]
@@ -49,21 +51,8 @@ class ShiftWeightedLabelLoss(Loss):
         self.weighted_sequence=None
 
     def __call__(self, model, inputs,return_outputs=False):
-        input_ids = inputs['input_ids']
-        attention_mask = inputs['attention_mask']
-        weighted_target_mask = inputs['target_mask']
-        #forward
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, return_dict=True) 
-        #[Batch_size,seqlnegth,vocab_size]
-        logits = outputs["logits"] if isinstance(outputs, dict) else outputs[0]
-
-        # 将labels中不属于target的部分，设为ignore_index，只计算target部分的loss
-        labels = torch.where(weighted_target_mask == 1, input_ids, self.ignore_index)
-        shift_logits = logits[..., :-1, :].contiguous()
-        shift_labels = labels[..., 1:].contiguous()
-        # Flatten the tokens
-        loss = self.loss_fn(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-        return (loss, outputs) if return_outputs else loss
+        
+       raise NotImplementedError
     
 class PairwiseRMLoss(Loss):
     def __call__(self,model,inputs,return_outputs=False):

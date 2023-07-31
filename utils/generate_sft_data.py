@@ -52,9 +52,32 @@ class OpenSourceDataGen(CustomDatasets):
     
     def generate_multiturn_tokenize(self,data_dict):
         curr_content="<s>"
+        utterances=[]
+        target_mask=[0]
         for dict_info in data_dict["conversation"]:
-            curr_content+=PROMPT_DICT["prompt_input"].format(dict_info["human"],dict_info["assistant"])+"</s>"
-        return self.tokenize(prompt=curr_content)
+            utterances.append(PROMPT_DICT["prompt_user"].format(dict_info["human"]))
+            utterances.append(PROMPT_DICT["prompt_assistant"].format(dict_info["assistant"])+"</s>")
+        utterances_ids=self.tokenizer(utterances).input_ids
+        input_ids=[self.tokenizer.bos_token_id]
+        for i,utterances_ids in enumerate(utterances_ids):
+            input_ids+=utterances_ids+[self.tokenizer.eos_token_id]
+            if i%2==0:
+                target_mask+=[0]*(len(utterances_ids)+1)
+            else:
+                target_mask+=[1]*(len(utterances_ids)+1)
+        assert len(input_ids)==len(target_mask)
+        
+        # 对长度进行截断
+        input_ids = input_ids[:self.Max_seq_len]
+        target_mask = target_mask[:self.Max_seq_len]
+        attention_mask = [1] * len(input_ids)
+        assert len(input_ids) == len(target_mask) == len(attention_mask)
+        inputs = {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': target_mask
+        }
+        return inputs
     
     
     def load_safety_prompts(self,data_path,field):
