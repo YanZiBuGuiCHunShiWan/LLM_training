@@ -51,20 +51,20 @@ class OpenSourceDataGen(CustomDatasets):
         return Is_chinese  # 忽略 的样本
     
     def generate_multiturn_tokenize(self,data_dict):
-        curr_content="<s>"
         utterances=[]
         target_mask=[0]
         for dict_info in data_dict["conversation"]:
-            utterances.append(PROMPT_DICT["prompt_user"].format(dict_info["human"]))
-            utterances.append(PROMPT_DICT["prompt_assistant"].format(dict_info["assistant"])+"</s>")
+            utterances.append(PROMPT_DICT["prompt_user"].format(dict_info["human"])+PROMPT_DICT["prompt_assistant"].replace("{}",""))
+            utterances.append(dict_info["assistant"]+"</s>")
         utterances_ids=self.tokenizer(utterances).input_ids
         input_ids=[self.tokenizer.bos_token_id]
         for i,utterances_ids in enumerate(utterances_ids):
-            input_ids+=utterances_ids+[self.tokenizer.eos_token_id]
             if i%2==0:
-                target_mask+=[0]*(len(utterances_ids)+1)
+                target_mask+=[0]*(len(utterances_ids))
+                input_ids+=utterances_ids
             else:
                 target_mask+=[1]*(len(utterances_ids)+1)
+                input_ids+=utterances_ids+[self.tokenizer.eos_token_id]
         assert len(input_ids)==len(target_mask)
         
         # 对长度进行截断
