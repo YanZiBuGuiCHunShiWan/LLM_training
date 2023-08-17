@@ -16,16 +16,16 @@ __all__=[
 
 DEFAULT_BOS_TOKEN: str = "<s>"
 DEFAULT_EOS_TOKEN: str = "</s>"
-PROMPT_USER: str = "Human: {}"
-PROMPT_ASSISTANT: str ="\n\nAssistant: {}"
+PROMPT_USER: str = "Human: {}\n</s>"
+PROMPT_ASSISTANT: str ="Assistant: {}"
 PROMPT_INPUT=PROMPT_USER+PROMPT_ASSISTANT
 SEED: int = 42
 SAFETY_PROMPT_FIELDS: list[str] = [
                     'Unfairness_And_Discrimination', 
-                    #'Crimes_And_Illegal_Activities', 
-                    #'Insult', 
+                    'Crimes_And_Illegal_Activities', 
+                    'Insult', 
                     'Mental_Health',
-                    #'Physical_Harm', 
+                    'Physical_Harm', 
                     'Privacy_And_Property',
                     'Ethics_And_Morality',
                     "all"]

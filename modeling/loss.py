@@ -2,6 +2,7 @@ from __future__ import annotations
 import torch
 import abc
 import torch.nn as nn
+from typing import Dict
 
 __all__=[
     "Loss",
@@ -27,7 +28,7 @@ class ShiftLabelMaskLoss(Loss):
         self.ignore_index = ignore_index
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=ignore_index)
 
-    def __call__(self, model, inputs,return_outputs=False):
+    def __call__(self, model, inputs: Dict[str:torch.Tensor] ,return_outputs=False):
         input_ids = inputs['input_ids']
         attention_mask = inputs['attention_mask']
         target_mask = inputs['labels']
@@ -44,6 +45,30 @@ class ShiftLabelMaskLoss(Loss):
         loss = self.loss_fn(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
         return (loss, outputs) if return_outputs else loss
     
+    
+class ShiftLabelLogitLoss(Loss):
+    def __init__(self,ignore_index):
+        super().__init__()
+        self.ignore_index=ignore_index
+        self.loss_fn = nn.CrossEntropyLoss(ignore_index=self.ignore_index)
+        
+    def __call__(self, model, inputs, return_outputs=False):
+        input_ids = inputs['input_ids']
+        attention_mask = inputs['attention_mask']
+        labels = inputs['labels']
+        #forward
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, return_dict=True) 
+        #[Batch_size,seqlnegth,vocab_size]
+        logits = outputs["logits"] if isinstance(outputs, dict) else outputs[0]
+
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = labels[..., 1:].contiguous()
+        # Flatten the tokens
+        loss = self.loss_fn(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        return (loss, outputs) if return_outputs else loss
+        
+    
+
 class ShiftWeightedLabelLoss(Loss):
     def __init__(self):
         super().__init__()
@@ -55,6 +80,9 @@ class ShiftWeightedLabelLoss(Loss):
        raise NotImplementedError
     
 class PairwiseRMLoss(Loss):
+    '''
+    Reward Model 的损失函数
+    '''
     def __call__(self,model,inputs,return_outputs=False):
         batch_size=inputs["input_ids"].size(0)//2
         _,_,batch_scores=model(**inputs,output_hidden_states=True,return_dict=True) #batch_score:[2*batchsize,seqlength]
@@ -64,9 +92,13 @@ class PairwiseRMLoss(Loss):
         
 
 class RMMarginRankingLoss(Loss):
+    '''
+    Reward Model 的损失函数
+    '''
     def __init__(self,margin):
         super().__init__()
         self.marginloss=nn.MarginRankingLoss(margin)
+        
     def __call__(self, model, inputs, return_outputs=False):
         batch_size=inputs.size(0)//2
         _,_,batch_scores=model(**inputs,output_hidden_states=True,return_dict=True) #batch_score:[2*batchsize,seqlength]

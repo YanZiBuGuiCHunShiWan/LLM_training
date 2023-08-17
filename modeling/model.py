@@ -106,8 +106,7 @@ def load_model(finetune_args: FinetuneArguments,local_rank=None,inference=False)
                 bnb_4bit_compute_dtype=torch.bfloat16,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
-            ),
-        )
+            ))
     elif finetune_args.quantization=="8bit":
         require_version('bitsandbytes>=0.39.0',
                         'To fix: pip install bitsandbytes>=0.39.0')
@@ -160,8 +159,8 @@ def load_model(finetune_args: FinetuneArguments,local_rank=None,inference=False)
                                             trust_remote_code=True,
                                             padding_side=padding_side)
     if tokenizer.pad_token_id is None:
-        tokenizer.pad_token_id=tokenizer.unk_token_id # set pad id to unk id,the original unk id is 0 .
-    assert tokenizer.pad_token_id!=tokenizer.eos_token_id,"pad_token_id should not be equal to eos_token_id"
+        tokenizer.pad_token=tokenizer.unk_token # set pad id to unk id,the original unk id is 0 .
+    assert tokenizer.pad_token_id!=tokenizer.eos_token_id,"pad_token_id should  not  be equal to eos_token_id"
     return model,tokenizer
 
 if __name__=="__main__":

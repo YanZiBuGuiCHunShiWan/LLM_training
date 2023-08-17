@@ -1,17 +1,62 @@
 ''' Data class for sft training'''
 from __future__ import annotations
-import jsonlines,transformers
+from typing import Any, Dict, List
+import numpy as np
+import torch
+import transformers
 from datasets import load_dataset,Dataset
 from torch.utils.data import DataLoader as DL,Dataset as DS
 from loguru import logger
 from transformers import AutoTokenizer
 from config.constants import SAFETY_PROMPT_FIELDS,PROMPT_DICT
-from utils.base import CustomDatasets
+from utils.base import CustomDatasets,TokenizedSample
 from typing_extensions import TypedDict
+from transformers import DataCollatorWithPadding
 
 __all__=[
-    "OpenSourceDataGen"
+    "OpenSourceDataGen",
+    "MultiturnConversationCollatorwithPadding"
 ]
+
+
+class MutiturnConversationCollatorWithPadding(object):
+    def __init__(self,tokenizer,Max_seq_length):
+        self.tokenizer=tokenizer
+        self.Max_seq_length=Max_seq_length
+        self.pad_token_id=self.tokenizer.pad_token_id
+    
+    def __call__(self,batch: List[Dict[str, Any]]) -> TokenizedSample:
+        lengths = [len(x['input_ids']) for x in batch]
+        batch_max_len = min(max(lengths), self.Max_seq_length)
+        input_ids_batch, attention_mask_batch, target_mask_batch = [], [], []
+        for x in batch:
+            input_ids = x['input_ids']
+            attention_mask = x['attention_mask']
+            target_mask = x['labels']
+            padding_len = batch_max_len - len(input_ids)
+            
+            input_ids = input_ids + [self.pad_token_id] * padding_len
+            attention_mask = attention_mask + [0] * padding_len
+            target_mask = target_mask + [0] * padding_len
+            
+            input_ids = input_ids[:self.Max_seq_length]
+            attention_mask = attention_mask[:self.Max_seq_length]
+            target_mask = target_mask[:self.Max_seq_length]
+
+            input_ids_batch.append(input_ids)
+            attention_mask_batch.append(attention_mask)
+            target_mask_batch.append(target_mask)
+
+        
+        input_ids_batch = torch.tensor(input_ids_batch, dtype=torch.long)
+        attention_mask_batch = torch.tensor(attention_mask_batch, dtype=torch.long)
+        target_mask_batch = torch.tensor(target_mask_batch, dtype=torch.long)
+        inputs = {
+            'input_ids': input_ids_batch,
+            'attention_mask': attention_mask_batch,
+            'labels': target_mask_batch
+        }
+        return inputs
 
 
 class OpenSourceDataGen(CustomDatasets):
@@ -40,24 +85,26 @@ class OpenSourceDataGen(CustomDatasets):
             prompt=data_dict["instruction"]
             input=data_dict["input"]
             answer=data_dict["output"]
-        input_text=self.tokenizer.bos_token+"Human: "+prompt+input+"\n\nAssistant: "
-        full_prompt=input_text+answer+self.tokenizer.eos_token
+       
+        full_prompt= self.tokenizer.bos_token+PROMPT_DICT["promt_input"].format((prompt+input),answer)+self.tokenizer.eos_token
         tokenized_full_prompt=self.tokenize(prompt=full_prompt)
         return tokenized_full_prompt
     
     def filter_fn(self,example):
         # 根据自己的需求编写过滤逻辑
-        Is_chinese=self.is_contains_chinese(example["conversation"][0]["human"])
-        return Is_chinese  # 忽略 的样本
+        state=self.is_contains_chinese(example["conversation"][0]["human"])
+        return state
     
     def generate_multiturn_tokenize(self,data_dict):
         utterances=[]
-        target_mask=[0]
         for dict_info in data_dict["conversation"]:
             utterances.append(PROMPT_DICT["prompt_user"].format(dict_info["human"])+PROMPT_DICT["prompt_assistant"].replace("{}",""))
-            utterances.append(dict_info["assistant"]+"</s>")
-        utterances_ids=self.tokenizer(utterances).input_ids
+            utterances.append(dict_info["assistant"])
+        utterances_ids=self.tokenizer(utterances,
+                                      add_special_tokens=False,
+                                      padding=False).input_ids
         input_ids=[self.tokenizer.bos_token_id]
+        target_mask=[0]
         for i,utterances_ids in enumerate(utterances_ids):
             if i%2==0:
                 target_mask+=[0]*(len(utterances_ids))
@@ -72,15 +119,24 @@ class OpenSourceDataGen(CustomDatasets):
         target_mask = target_mask[:self.Max_seq_len]
         attention_mask = [1] * len(input_ids)
         assert len(input_ids) == len(target_mask) == len(attention_mask)
-        inputs = {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask,
-            'labels': target_mask
-        }
-        return inputs
+        labels=input_ids.copy() if not self.target_mask else target_mask
+        return {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "labels": labels
+            }
+        
     
+    def __map_qiaoban(self,datadict):
+        content=datadict["input"]
+        input_dict=self.tokenizer(content,add_special_tokens=False,max_length=self.Max_seq_len,truncation=True)
+        labels=input_dict["input_ids"].copy()
+        input_dict["labels"]=labels
+        return input_dict
+        
+        
     
-    def load_safety_prompts(self,data_path,field):
+    def __load_safety_prompts(self,data_path,field):
         assert field in SAFETY_PROMPT_FIELDS,"please check the field name."
         if field.lower()!="all":
             dataset=load_dataset("json",data_files=data_path,field=field,split="train")
@@ -92,21 +148,20 @@ class OpenSourceDataGen(CustomDatasets):
                         yield j #j: {"prompt":"xxx","response":"xxx","type":"xxx"}
             dataset=Dataset.from_generator(tmp_gen) #datasets.arrow_dataset.Dataset
         return dataset
-    
         
-    def load_belle_cn_50(self,data_path):
+    def __load_belle_cn_50(self,data_path):
         dataset=load_dataset("json",data_files=data_path)["train"]
         return dataset
     
-    def load_openassistant_conversation(self): 
-        
-        raise NotImplementedError
-    
-    def load_firefly(self,datapath):
+    def load_qiaoban_conversation(self,datapath): 
         dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath})
         return dataset
     
-    def load_moss_sft(self,datapath):
+    def __load_firefly(self,datapath):
+        dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath})
+        return dataset
+    
+    def __load_moss_sft(self,datapath):
         dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath}).filter(self.filter_fn)
         return dataset
         
@@ -118,24 +173,30 @@ class OpenSourceDataGen(CustomDatasets):
         
         if data_name.lower()=="belle":
             logger.info("loading Belle.....")
-            dataset=self.load_belle_cn_50(datapath)
+            dataset=self.__load_belle_cn_50(datapath)
             column_names=dataset.column_names
+            
         elif data_name.lower()=="firefly":
             logger.info("loading firefly........")
-            dataset=self.load_firefly(datapath)
+            dataset=self.__load_firefly(datapath)
             column_names=dataset.column_names
             
         elif data_name.lower()=="moss-sft":
             logger.info("loading moss-sft.........")
-            dataset=self.load_moss_sft(datapath)
+            dataset=self.__load_moss_sft(datapath)
             column_names=dataset.column_names
             map_func=self.generate_multiturn_tokenize
         
         elif data_name.lower()=="safetyprompts":
             logger.info("Loading safetyprompts......")
-            dataset=self.load_safety_prompts(datapath,field=field)
+            dataset=self.__load_safety_prompts(datapath,field=field)
             column_names=["type","response","prompt"]
             
+        elif data_name.lower()=="qiaoban":
+            logger.info("Loading qiaoban........")
+            dataset=self.load_qiaoban_conversation(datapath)
+            map_func=self.__map_qiaoban
+            column_names=dataset.column_names
         else:
             raise NotImplementedError
         
@@ -150,28 +211,29 @@ class OpenSourceDataGen(CustomDatasets):
     
 
 if __name__=="__main__":
-    tokenizer=AutoTokenizer.from_pretrained("../../ptm/baichuan/",trust_remote_code=True)
+    #model_path="/data/Llama-2-7b-hf"
+    model_path="../ptm/baichuan"
+    tokenizer=AutoTokenizer.from_pretrained(model_path,trust_remote_code=True)
+    tokenizer.padding_side="right"
     tokenizer.pad_token_id=tokenizer.unk_token_id
+    print("eos token id:",tokenizer.eos_token_id)
+    print("bos token id: ",tokenizer.bos_token_id)
     #datafile="../data/Safetyprompts/typical_safety_scenarios.json"
-    datafile="../data/sft_data/Moss-sft/moss-tiny.jsonl"
-    datagenerator=OpenSourceDataGen(tokenizer,1024)
+    datafile="data/sft_data/Moss-sft/moss_tiny.jsonl"
+    #datafile="../data/sft_data/Moss-sft/moss-003-sft-data.jsonl"
+    #datafile="data/sft_data/Qiaoban/child_chat_data.json"
+    datagenerator=OpenSourceDataGen(tokenizer,4096,Target_mask=True)
     train_dataset,cal_dataset=datagenerator.generate_train_test_data(datapath=datafile,test_size=0.2)
-    print(tokenizer.bos_token)
-    print(tokenizer.bos_token_id)
-    print(tokenizer.eos_token)
-    print(tokenizer.eos_token_id)
-    
-    print(train_dataset[0]["input_ids"])
-    print(train_dataset[3]["input_ids"])
-    print(train_dataset[9]["input_ids"])
-    print(train_dataset[11]["input_ids"])
+    # print(len(train_dataset))
+    print(train_dataset[11])
     print(tokenizer.decode(train_dataset[11]["input_ids"]))
-    Dataloader=DL(train_dataset,collate_fn=transformers.DataCollatorForSeq2Seq(
-            tokenizer=tokenizer,
-            pad_to_multiple_of=8,
-            return_tensors="pt",
-            padding=True
-        ))
+    print(train_dataset)
+    Dataloader=DL(train_dataset,batch_size=3,collate_fn=transformers.DataCollatorForSeq2Seq(
+           tokenizer=tokenizer,
+           pad_to_multiple_of=8,
+           return_tensors="pt",
+       ))
     for data in Dataloader:
         print(data)
+        print(data["input_ids"].shape)
         break

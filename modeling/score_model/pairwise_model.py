@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
-from transformers import AutoModelForCausalLM,AutoTokenizer,Trainer
+from transformers import PreTrainedModel,Trainer
 from peft import PeftModel
 from trl import AutoModelForCausalLMWithValueHead
-from typing import Dict,List,Optional
+from typing import Dict,List,Optional,Literal
 
 
 class PairwiseRewardModelTrainer(Trainer):
@@ -13,7 +13,7 @@ class PairwiseRewardModelTrainer(Trainer):
         
     def compute_loss(
         self,
-        model: PeftModel,
+        model:PeftModel,
         inputs: Dict[str,torch.Tensor],
         return_outputs: Optional[bool] = False):
         '''

@@ -5,7 +5,8 @@ from typing_extensions import NotRequired ,TypedDict
 
 __all__=[
     "TokenizedSample",
-    "CustomDatasets"
+    "CustomDatasets",
+    "RawSample"
 ]
 
 class TokenizedSample(TypedDict,total=True):
@@ -15,9 +16,10 @@ class TokenizedSample(TypedDict,total=True):
 
 class CustomDatasets(object):
     
-    def __init__(self,tokenizer: transformers.AutoTokenizer,Max_seq_len: int):
+    def __init__(self,tokenizer: transformers.AutoTokenizer,Max_seq_len: int,Target_mask: bool = True):
         self.tokenizer=tokenizer
         self.Max_seq_len=Max_seq_len
+        self.target_mask=Target_mask
         
     def tokenize(self,prompt,add_eos_token=True)->TokenizedSample:
         result = self.tokenizer(
@@ -41,10 +43,16 @@ class CustomDatasets(object):
         result["labels"] = result["input_ids"].copy()
         return result
     
+    
+    
     def gen_from_jsonlines(self,datapath):
         with jsonlines.open(datapath,"r") as f:
             for line in f:
-                yield line
+                if isinstance(line,list):
+                    for j in line:
+                        yield j
+                else:
+                    yield line
                 
     @abc.abstractmethod            
     def filter_fn(self):
