@@ -39,10 +39,6 @@ def main():
     #################### wrap model with peft #####################
     model,tokenizer=load_model(args,local_rank)
     
-    if tokenizer.__class__.__name__ == 'QWenTokenizer':
-        tokenizer.pad_token_id = tokenizer.eod_id
-        tokenizer.bos_token_id = tokenizer.eod_id
-        tokenizer.eos_token_id = tokenizer.eod_id
         
     if args.finetuning_type=="lora":
         lora_target_modules=find_all_linear_modules(model,quantization=args.quantization)
@@ -58,17 +54,17 @@ def main():
     if local_rank==0:
         model.print_trainable_parameters()
     #################### prepare data for training ################
-    datagenerator=OpenSourceDataGen(tokenizer=tokenizer,Max_seq_len=args.max_seq_length,Target_mask=True)
+    datagenerator=OpenSourceDataGen(tokenizer=tokenizer,Max_seq_len=args.max_seq_length,Target_mask=False)
     train_dataset,valid_dataset=datagenerator.generate_train_test_data(datapath=args.train_file,field="all",test_size=args.test_size)
     
-    loss=ShiftLabelMaskLoss(ignore_index=-100)
+    #loss=ShiftLabelMaskLoss(ignore_index=-100)
     #################### start training ###########################    
-    trainer=SFTTrainer(
+    trainer=Trainer(
         model=model,
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
         args=training_args,
-        compute_loss=loss,
+        #compute_loss=loss,
         data_collator=transformers.DataCollatorForSeq2Seq(
            tokenizer=tokenizer,
            pad_to_multiple_of=8,

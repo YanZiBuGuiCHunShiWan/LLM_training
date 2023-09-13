@@ -66,7 +66,7 @@ def init_chat_history():
         st.session_state.messages = []
 
     return st.session_state.messages
-
+    
 
 def main():
     model, tokenizer = init_model()

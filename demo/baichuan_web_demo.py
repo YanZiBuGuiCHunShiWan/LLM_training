@@ -3,6 +3,7 @@ import torch,os
 import streamlit as st
 from transformers import AutoModelForCausalLM, AutoTokenizer,BitsAndBytesConfig
 from transformers.generation.utils import GenerationConfig
+from peft import PeftModel
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 st.set_page_config(page_title="Baichuan-13B-Chat")
@@ -12,7 +13,7 @@ st.title("Baichuan-13B-Chat")
 @st.cache_resource
 def init_model():
     model = AutoModelForCausalLM.from_pretrained(
-        "/data/Baichuan-13B-Chat/",
+        "/data/Baichuan2-7b-chat/",
         torch_dtype=torch.float16,
         device_map=torch.cuda.current_device(),
         trust_remote_code=True,
@@ -23,13 +24,14 @@ def init_model():
                 bnb_4bit_quant_type="nf4",
     ))
     model.generation_config = GenerationConfig.from_pretrained(
-        "/data/Baichuan-13B-Chat/"
+        "/data/Baichuan2-7b-chat/"
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        "/data/Baichuan-13B-Chat/",
+        "/data/Baichuan2-7b-chat/",
         use_fast=False,
         trust_remote_code=True
     )
+    # model=PeftModel.from_pretrained(model,"dump/baichuan7b-2-chat-mix_custom").eval()
     return model, tokenizer
 
 

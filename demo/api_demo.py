@@ -14,7 +14,7 @@ logger.setLevel("ERROR")
 warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_name", default="/data/Firefly-baichuan-7b", 
+parser.add_argument("--model_name", default="/data/Llama2-Chinese-7b-Chat/", 
                     choices=["../ptm/baichuan", 
                              "/data/Llama2-Chinese-7b-Chat/"], type=str)
 #parser.add_argument("--lora_path",type=str,default="dump/firefly-baichuan-7b-prompt/")

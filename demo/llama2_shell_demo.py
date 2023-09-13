@@ -13,17 +13,6 @@ def main():
     #model_name="/data/Qwen-7B-Base"
     #model_name="/data/Llama-2-7b-hf"
     model_name="/data/Llama2-Chinese-7b-Chat"
-    #lora_path="output/firefly-baichuan-7b/checkpoint-1500"
-    #lora_path="dump/baichuan-7b-clm_prompt"
-    #lora_path="dump/baichuan-7b-shiftmask-prompt"
-    #lora_path="dump/llama-7b-shiftmask-prompt"
-    #lora_path="dump/baichuan-7b-smile-clm-prompt"
-    #lora_path="dump/Qwen-7b-smile-clm-prompt"
-    # model_name = 'YeungNLP/firefly-baichuan-7b'
-    # model_name = 'YeungNLP/firefly-ziya-13b'
-    # model_name = 'YeungNLP/firefly-bloom-7b1'
-
-    device = 'cuda'
     max_new_tokens = 512    # 每轮对话最多生成多少个token
     history_max_len = 4096  # 模型记忆的最大token长度
     top_p = 0.9
@@ -59,13 +48,15 @@ def main():
         if model.config.model_type == 'chatglm':
             user_input = '[Round {}]\n\n问：{}\n\n答：'.format(utterance_id, user_input)
         else:
-            user_input = 'Human: {}\n</s><s>Assistant: '.format(user_input)
+            if utterance_id==1:
+                user_input = 'Human: {}\n</s><s>Assistant: '.format(user_input)
+            else:
+                user_input =  '\n</s><s>Human: {}\n</s><s>Assistant: '.format(user_input)
             #user_input = '求助者: {}</s>支持者: '.format(user_input)
         user_input_ids = tokenizer(user_input, return_tensors="pt", add_special_tokens=False).input_ids
         history_token_ids = torch.concat((history_token_ids, user_input_ids), dim=1)
         model_input_ids = history_token_ids[:, -history_max_len:].to(model.device)
         #model_input_ids = history_token_ids[:, :].to(model.device)
-        logger.info("当前输入为：{}".format(tokenizer.decode(model_input_ids)))
         with torch.no_grad():
             outputs = model.generate(
                 input_ids=model_input_ids, max_new_tokens=max_new_tokens, do_sample=True, top_p=top_p,

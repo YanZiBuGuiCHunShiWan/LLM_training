@@ -9,7 +9,8 @@ import torch,sys,os
 import json
 import pandas 
 import argparse
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
+from loguru import logger
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 with gr.Blocks() as demo:
     gr.Markdown("""<h1><center>智能助手</center></h1>""")
@@ -39,6 +40,7 @@ with gr.Blocks() as demo:
             prompt += '\n'.join([("<s>Human: "+one_chat[0].replace('<br>','\n')+'\n</s>' if one_chat[0] else '')  +"<s>Assistant: "+one_chat[1].replace('<br>','\n')+'\n</s>'    for one_chat in history_true[-slider_context_times:] ])
         prompt +=  "<s>Human: "+history[-1][0].replace('<br>','\n')+"\n</s><s>Assistant: "
         input_ids = tokenizer([prompt], return_tensors="pt",add_special_tokens=False).input_ids[:,-4096:].to(model.device)      
+        logger.info(tokenizer.decode(input_ids))
         print("prompt is :",prompt)  
         print("length of prompt is :{}".format(len(prompt)))
         print("####################################################################")

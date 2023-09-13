@@ -126,7 +126,6 @@ class OpenSourceDataGen(CustomDatasets):
                 "labels": labels
             }
         
-    
     def __map_qiaoban(self,datadict):
         content=datadict["input"]
         input_dict=self.tokenizer(content,add_special_tokens=False,max_length=self.Max_seq_len,truncation=True)
@@ -134,8 +133,25 @@ class OpenSourceDataGen(CustomDatasets):
         input_dict["labels"]=labels
         return input_dict
         
+    def __map_smile(self,datadict):
+        content=(self.tokenizer.eos_token).join(datadict["content"])+self.tokenizer.eos_token
+        input_dict=self.tokenizer(content,add_special_tokens=False,max_length=self.Max_seq_len,truncation=True)
+        labels=input_dict["input_ids"].copy()
+        input_dict["labels"]=labels
+        return input_dict   
         
-    
+    def __map_mix_custom(self,datadict):
+        #inputs="你的身份是数业智能的人工智能助手小陆，接下来的对话发生在你和来访者之间。你最终要提供具体的、有帮助的、对来访者无害的建议使问题得以解决。\n"
+        inputs=""
+        for dict_info in datadict["content"]:
+            inputs+="<reserved_106>"+dict_info["question"]
+            inputs+="<reserved_107>"+dict_info["answer"]+"</s>"
+        input_dict=self.tokenizer(inputs,add_special_tokens=False,max_length=self.Max_seq_len,truncation=True)
+        labels=input_dict["input_ids"].copy()
+        input_dict["labels"]=labels
+        return input_dict   
+        
+
     def __load_safety_prompts(self,data_path,field):
         assert field in SAFETY_PROMPT_FIELDS,"please check the field name."
         if field.lower()!="all":
@@ -145,7 +161,7 @@ class OpenSourceDataGen(CustomDatasets):
                 for field_name in SAFETY_PROMPT_FIELDS[:-1]:
                     datafile=load_dataset("json",data_files=data_path,field=field_name,split="train")
                     for j in datafile:
-                        yield j #j: {"prompt":"xxx","response":"xxx","type":"xxx"}
+                        yield j 
             dataset=Dataset.from_generator(tmp_gen) #datasets.arrow_dataset.Dataset
         return dataset
         
@@ -165,6 +181,14 @@ class OpenSourceDataGen(CustomDatasets):
         dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath}).filter(self.filter_fn)
         return dataset
         
+    def __load_smile(self,datapath):
+        dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath})
+        return dataset
+    
+    def __load_mix_custom(self,datapath):
+        dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath})
+        return dataset
+    
     def generate_train_test_data(self,datapath,test_size,field="all"):
         
         map_func=self.generate_prompt_and_tokenize
@@ -197,36 +221,52 @@ class OpenSourceDataGen(CustomDatasets):
             dataset=self.load_qiaoban_conversation(datapath)
             map_func=self.__map_qiaoban
             column_names=dataset.column_names
+        elif data_name.lower()=="smile":
+            logger.info("Loading smile multiturn-conversation..........")
+            dataset=self.__load_smile(datapath)
+            map_func=self.__map_smile
+            column_names=dataset.column_names
+        elif data_name.lower()=="mix_custom":
+             logger.info("Loading Mix Custom multiturn-conversation.............")
+             dataset=self.__load_mix_custom(datapath)
+             map_func=self.__map_mix_custom
+             column_names=dataset.column_names
         else:
             raise NotImplementedError
         
         if test_size>0:
             splitted_dataset=dataset.train_test_split(test_size=test_size,shuffle=False,seed=42) 
-            train_dataset=splitted_dataset["train"].map(map_func,remove_columns=column_names,num_proc=8)
-            valid_dataset=splitted_dataset["test"].map(map_func,remove_columns=column_names,num_proc=8)
+            train_dataset=splitted_dataset["train"].map(map_func,remove_columns=column_names,num_proc=1)
+            valid_dataset=splitted_dataset["test"].map(map_func,remove_columns=column_names,num_proc=1)
         else:
-            train_dataset=dataset.map(map_func,remove_columns=column_names,num_proc=8)
+            train_dataset=dataset.map(map_func,remove_columns=column_names,num_proc=1)
             valid_dataset=None
         return train_dataset,valid_dataset
     
 
 if __name__=="__main__":
     #model_path="/data/Llama-2-7b-hf"
-    model_path="../ptm/baichuan"
+    model_path="/data/Baichuan2-7b-chat"
     tokenizer=AutoTokenizer.from_pretrained(model_path,trust_remote_code=True)
     tokenizer.padding_side="right"
-    tokenizer.pad_token_id=tokenizer.unk_token_id
-    print("eos token id:",tokenizer.eos_token_id)
-    print("bos token id: ",tokenizer.bos_token_id)
+    if tokenizer.__class__.__name__ == 'QWenTokenizer':
+        tokenizer.pad_token_id = tokenizer.eod_id
+        tokenizer.bos_token_id = tokenizer.eod_id
+        tokenizer.eos_token_id = tokenizer.eod_id
+    # tokenizer.pad_token_id=tokenizer.unk_token_id
+    # print("eos token id:",tokenizer.eos_token_id)
+    # print("bos token id: ",tokenizer.bos_token_id)
     #datafile="../data/Safetyprompts/typical_safety_scenarios.json"
-    datafile="data/sft_data/Moss-sft/moss_tiny.jsonl"
+    #datafile="data/sft_data/Moss-sft/moss_tiny.jsonl"
     #datafile="../data/sft_data/Moss-sft/moss-003-sft-data.jsonl"
     #datafile="data/sft_data/Qiaoban/child_chat_data.json"
-    datagenerator=OpenSourceDataGen(tokenizer,4096,Target_mask=True)
-    train_dataset,cal_dataset=datagenerator.generate_train_test_data(datapath=datafile,test_size=0.2)
+    #datafile="data/sft_data/smile/train.json"
+    datafile="data/sft_data/Mix_custom/train.jsonl"
+    datagenerator=OpenSourceDataGen(tokenizer,2048,Target_mask=False)
+    train_dataset,cal_dataset=datagenerator.generate_train_test_data(datapath=datafile,test_size=0)
     # print(len(train_dataset))
-    print(train_dataset[11])
-    print(tokenizer.decode(train_dataset[11]["input_ids"]))
+    print(train_dataset[1])
+    print(tokenizer.decode(train_dataset[1]["input_ids"]))
     print(train_dataset)
     Dataloader=DL(train_dataset,batch_size=3,collate_fn=transformers.DataCollatorForSeq2Seq(
            tokenizer=tokenizer,
