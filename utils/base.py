@@ -16,10 +16,9 @@ class TokenizedSample(TypedDict,total=True):
 
 class CustomDatasets(object):
     
-    def __init__(self,tokenizer: transformers.AutoTokenizer,Max_seq_len: int,Target_mask: bool = True):
+    def __init__(self,tokenizer: transformers.AutoTokenizer,Max_seq_len: int):
         self.tokenizer=tokenizer
-        self.Max_seq_len=Max_seq_len
-        self.target_mask=Target_mask
+        self.max_seq_len=Max_seq_len
         
     def tokenize(self,prompt,add_eos_token=True)->TokenizedSample:
         result = self.tokenizer(

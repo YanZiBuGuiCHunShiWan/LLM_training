@@ -31,7 +31,7 @@ class ShiftLabelMaskLoss(Loss):
     def __call__(self, model, inputs: Dict[str:torch.Tensor] ,return_outputs=False):
         input_ids = inputs['input_ids']
         attention_mask = inputs['attention_mask']
-        target_mask = inputs['labels']
+        target_mask = inputs['labels'] #labels就是target_mask
         #forward
         outputs = model(input_ids=input_ids, attention_mask=attention_mask, return_dict=True) 
         #[Batch_size,seqlnegth,vocab_size]

@@ -140,8 +140,6 @@ def load_model(finetune_args: FinetuneArguments,local_rank=None,inference=False)
             torch_dtype=torch.float16,
             trust_remote_code=True,
         )
-
-    
      # Enable model parallelism.
     # 设置两个和并行操作相关的参数
     setattr(model, 'model_parallel', True)
@@ -150,17 +148,26 @@ def load_model(finetune_args: FinetuneArguments,local_rank=None,inference=False)
         model=prepare_model_for_training(model,finetuning_type=finetune_args.finetuning_type)
     if finetune_args.finetuning_type=="full":
         model=model.float()
-    padding_side="right"
+    #padding_side="right"
     if finetune_args.training_stage=="rm":
         padding_side="left"
         model=AutoModelForCausalLMWithValueHead.from_pretrained(model,trust_remote_code=True)
     
     tokenizer=AutoTokenizer.from_pretrained(finetune_args.model_name_or_path,
-                                            trust_remote_code=True,
-                                            padding_side=padding_side)
+                                            trust_remote_code=True)
+    
+    if tokenizer.__class__.__name__ == 'QWenTokenizer':
+        tokenizer.pad_token_id = tokenizer.eod_id
+        tokenizer.bos_token_id = tokenizer.eod_id
+        tokenizer.eos_token_id = tokenizer.eod_id
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token=tokenizer.unk_token # set pad id to unk id,the original unk id is 0 .
-    assert tokenizer.pad_token_id!=tokenizer.eos_token_id,"pad_token_id should  not  be equal to eos_token_id"
+    if tokenizer.__class__.__name__ == 'QWenTokenizer':
+        assert tokenizer.pad_token_id==tokenizer.eos_token_id,"pad_token_id should  be equal to eos_token_id"
+    if tokenizer.__class__.__name__ == 'LlamaTokenizerFast':
+        assert tokenizer.pad_token == tokenizer.eos_token
+    else:
+        assert tokenizer.pad_token_id!=tokenizer.eos_token_id,"pad_token_id should  not  be equal to eos_token_id"
     return model,tokenizer
 
 if __name__=="__main__":

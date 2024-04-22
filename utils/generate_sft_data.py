@@ -1,25 +1,20 @@
 ''' Data class for sft training'''
 from __future__ import annotations
-from typing import Any, Dict, List
-import numpy as np
+from typing import Any, Dict, List,Union
 import torch
-import transformers
 from datasets import load_dataset,Dataset
 from torch.utils.data import DataLoader as DL,Dataset as DS
 from loguru import logger
 from transformers import AutoTokenizer
-from config.constants import SAFETY_PROMPT_FIELDS,PROMPT_DICT
 from utils.base import CustomDatasets,TokenizedSample
-from typing_extensions import TypedDict
-from transformers import DataCollatorWithPadding
+from config.constants import FEEDBACK_TOKEN_DICT
 
 __all__=[
     "OpenSourceDataGen",
     "MultiturnConversationCollatorwithPadding"
 ]
 
-
-class MutiturnConversationCollatorWithPadding(object):
+class MultiturnConversationCollatorWithPadding:
     def __init__(self,tokenizer,Max_seq_length):
         self.tokenizer=tokenizer
         self.Max_seq_length=Max_seq_length
@@ -51,10 +46,11 @@ class MutiturnConversationCollatorWithPadding(object):
         input_ids_batch = torch.tensor(input_ids_batch, dtype=torch.long)
         attention_mask_batch = torch.tensor(attention_mask_batch, dtype=torch.long)
         target_mask_batch = torch.tensor(target_mask_batch, dtype=torch.long)
+        labels = torch.where(target_mask_batch == 1, input_ids_batch, -100)
         inputs = {
             'input_ids': input_ids_batch,
             'attention_mask': attention_mask_batch,
-            'labels': target_mask_batch
+            'labels': labels
         }
         return inputs
 
@@ -72,208 +68,164 @@ class OpenSourceDataGen(CustomDatasets):
             if '\u4e00' <= _char <= '\u9fa5':
                 return True
         return False
-
-    def generate_prompt_and_tokenize(self,data_dict):
-        input=""
-        if "response" in data_dict.keys():
-            prompt=data_dict["prompt"]
-            answer=data_dict["response"]
-        elif "target" in data_dict.keys():
-            prompt=data_dict["input"]
-            answer=data_dict["target"]
-        else:
-            prompt=data_dict["instruction"]
-            input=data_dict["input"]
-            answer=data_dict["output"]
-       
-        full_prompt= self.tokenizer.bos_token+PROMPT_DICT["promt_input"].format((prompt+input),answer)+self.tokenizer.eos_token
-        tokenized_full_prompt=self.tokenize(prompt=full_prompt)
-        return tokenized_full_prompt
     
     def filter_fn(self,example):
         # 根据自己的需求编写过滤逻辑
         state=self.is_contains_chinese(example["conversation"][0]["human"])
         return state
     
-    def generate_multiturn_tokenize(self,data_dict):
-        utterances=[]
-        for dict_info in data_dict["conversation"]:
-            utterances.append(PROMPT_DICT["prompt_user"].format(dict_info["human"])+PROMPT_DICT["prompt_assistant"].replace("{}",""))
-            utterances.append(dict_info["assistant"])
-        utterances_ids=self.tokenizer(utterances,
-                                      add_special_tokens=False,
-                                      padding=False).input_ids
-        input_ids=[self.tokenizer.bos_token_id]
-        target_mask=[0]
-        for i,utterances_ids in enumerate(utterances_ids):
-            if i%2==0:
-                target_mask+=[0]*(len(utterances_ids))
-                input_ids+=utterances_ids
-            else:
-                target_mask+=[1]*(len(utterances_ids)+1)
-                input_ids+=utterances_ids+[self.tokenizer.eos_token_id]
-        assert len(input_ids)==len(target_mask)
+    def __build_chatglm(self,datadict,
+                        mask: Union[str,"nomask","collapsed","ordinary"],
+                        feedback_token:bool=False):
+        '''
+        mask: 损失函数计算掩码类型
+            nomask->无掩码。
+            collapsed->多轮对话拼接成一条，掩码掉用户提问部分。
+            ordinary->多轮对话拆解成多条，掩码掉前k-1轮和当前第k轮的用户提问部分。
+        feedback_token: 是否按照chain of hindsight 一样给回答添加feedback token，不计算feedback token的损失。
+        '''
+        gmask_token_id = self.tokenizer.get_command('[gMASK]')
+        sop_token_id = self.tokenizer.get_command('sop')
+        input_ids = [gmask_token_id, sop_token_id]  # 收集
+        target_mask = [0] * 2
+        if feedback_token:
+            bad_feedback_token_ids=self.tokenizer(FEEDBACK_TOKEN_DICT["bad"],add_special_tokens=False).input_ids
+            good_feedback_token_ids=self.tokenizer(FEEDBACK_TOKEN_DICT["good"],add_special_tokens=False).input_ids
+            bad_feedback_token_len=len(bad_feedback_token_ids)
+            good_feedback_token_len=len(good_feedback_token_ids)
+            
         
-        # 对长度进行截断
-        input_ids = input_ids[:self.Max_seq_len]
-        target_mask = target_mask[:self.Max_seq_len]
+        for dict_info in datadict["content"]:
+            if feedback_token:
+                user_token_ids = self.tokenizer.build_single_message("user","",dict_info["question"])
+                bad_assistant_token_ids = self.tokenizer.build_single_message("assistant",
+                                                                              "",
+                                                                              FEEDBACK_TOKEN_DICT["bad"])
+                bad_assistant_content_token_ids = self.tokenizer(dict_info["bad_answer"],add_special_tokens=False).input_ids+[self.tokenizer.eos_token_id]
+                good_assistant_token_ids =  self.tokenizer(dict_info["good_answer"],add_special_tokens=False).input_ids+[self.tokenizer.eos_token_id]
+                
+                input_ids +=user_token_ids+bad_assistant_token_ids+bad_assistant_content_token_ids+good_feedback_token_ids+good_assistant_token_ids
+                target_mask+=[0]*len(user_token_ids)+[0,1,1]+[0]*bad_feedback_token_len+[1]*len(bad_assistant_content_token_ids)+[0]*good_feedback_token_len+[1]*len(good_assistant_token_ids)
+            else:
+                user_token_ids = self.tokenizer.build_single_message("user","",dict_info["question"])
+                assistant_token_ids = self.tokenizer.build_single_message("assistant","",dict_info["answer"])
+                input_ids +=user_token_ids+assistant_token_ids+[self.tokenizer.eos_token_id]    
+                target_mask+=[0]*len(user_token_ids)+[0]+[1]*(len(assistant_token_ids)-1)+[1]
+            
+        assert len(input_ids)==len(target_mask)
+        if mask == "nomask":
+            labels = [0,0]+[1]*(len(target_mask)-2)
+        elif mask == "collapsed":
+            labels = target_mask
+        else:
+            last_assistant_token_ids=self.tokenizer.build_single_message("assistant","",datadict['content'][-1]["answer"])
+            last_message_len = len(last_assistant_token_ids)
+            labels=[0]*len(target_mask)
+            labels[-last_message_len:]=[1]*last_message_len
+            
+        input_ids = input_ids[:self.max_seq_len]
+        target_mask = target_mask[:self.max_seq_len]
         attention_mask = [1] * len(input_ids)
         assert len(input_ids) == len(target_mask) == len(attention_mask)
-        labels=input_ids.copy() if not self.target_mask else target_mask
-        return {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-                "labels": labels
-            }
         
-    def __map_qiaoban(self,datadict):
-        content=datadict["input"]
-        input_dict=self.tokenizer(content,add_special_tokens=False,max_length=self.Max_seq_len,truncation=True)
-        labels=input_dict["input_ids"].copy()
-        input_dict["labels"]=labels
-        return input_dict
+        inputs = {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': labels
+        }
+        return inputs
         
-    def __map_smile(self,datadict):
-        content=(self.tokenizer.eos_token).join(datadict["content"])+self.tokenizer.eos_token
-        input_dict=self.tokenizer(content,add_special_tokens=False,max_length=self.Max_seq_len,truncation=True)
-        labels=input_dict["input_ids"].copy()
-        input_dict["labels"]=labels
-        return input_dict   
+    def __build_qwen():
+        pass
+    
+    def __build_llama():
+        pass
         
-    def __map_mix_custom(self,datadict):
-        #inputs="你的身份是数业智能的人工智能助手小陆，接下来的对话发生在你和来访者之间。你最终要提供具体的、有帮助的、对来访者无害的建议使问题得以解决。\n"
-        inputs=""
-        for dict_info in datadict["content"]:
-            inputs+="<reserved_106>"+dict_info["question"]
-            inputs+="<reserved_107>"+dict_info["answer"]+"</s>"
-        input_dict=self.tokenizer(inputs,add_special_tokens=False,max_length=self.Max_seq_len,truncation=True)
-        labels=input_dict["input_ids"].copy()
-        input_dict["labels"]=labels
-        return input_dict   
-        
+    def __map_empathy(self,datadict,mask: str="collapsed",feedback_token:bool=True):
+        '''
+        mask:bool 用于控制是否屏蔽 人类 的输入，只计算 助手 的回答结果的损失
+        datadict: {"conversation_id":"x","content":[{"question":"xxxx","answer":"xxxx"},
+        {"question":"xxxx","answer":"xxxx"},...,
+        {"question":"xxxx","answer":"xxxx"}]}
+        '''
+        inputs = self.__build_chatglm(datadict=datadict,mask=mask,feedback_token=feedback_token)
+        return inputs
 
-    def __load_safety_prompts(self,data_path,field):
-        assert field in SAFETY_PROMPT_FIELDS,"please check the field name."
-        if field.lower()!="all":
-            dataset=load_dataset("json",data_files=data_path,field=field,split="train")
-        else:
-            def tmp_gen():
-                for field_name in SAFETY_PROMPT_FIELDS[:-1]:
-                    datafile=load_dataset("json",data_files=data_path,field=field_name,split="train")
-                    for j in datafile:
-                        yield j 
-            dataset=Dataset.from_generator(tmp_gen) #datasets.arrow_dataset.Dataset
-        return dataset
-        
-    def __load_belle_cn_50(self,data_path):
-        dataset=load_dataset("json",data_files=data_path)["train"]
-        return dataset
+
+    def __map_mix_custom(self,datadict,mask: Union[str,"nomask","collapsed","ordinary"],feedback_token:bool=False):
+        '''
+        mask:bool 用于控制是否屏蔽 人类 的输入，只计算 助手 的回答结果的损失
+        datadict: {"conversation_id":"x","content":[{"question":"xxxx","answer":"xxxx"},
+        {"question":"xxxx","answer":"xxxx"},...,
+        {"question":"xxxx","answer":"xxxx"}]}
+        '''
+        inputs = self.__build_chatglm(datadict=datadict,mask=mask,feedback_token=feedback_token)
+        return inputs
+
     
-    def load_qiaoban_conversation(self,datapath): 
+    def __load_jsonlines(self,datapath):
         dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath})
         return dataset
     
-    def __load_firefly(self,datapath):
-        dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath})
-        return dataset
-    
-    def __load_moss_sft(self,datapath):
-        dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath}).filter(self.filter_fn)
-        return dataset
-        
-    def __load_smile(self,datapath):
-        dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath})
-        return dataset
-    
-    def __load_mix_custom(self,datapath):
-        dataset=Dataset.from_generator(self.gen_from_jsonlines,gen_kwargs={"datapath":datapath})
-        return dataset
-    
-    def generate_train_test_data(self,datapath,test_size,field="all"):
-        
-        map_func=self.generate_prompt_and_tokenize
-        
+
+    def generate_train_test_data(self,datapath,test_size,mask: Union[str,"nomask","collapsed","ordinary"],feedback_token:bool=False):
         data_name=datapath.split("/")[-2]
-        
-        if data_name.lower()=="belle":
-            logger.info("loading Belle.....")
-            dataset=self.__load_belle_cn_50(datapath)
-            column_names=dataset.column_names
-            
-        elif data_name.lower()=="firefly":
-            logger.info("loading firefly........")
-            dataset=self.__load_firefly(datapath)
-            column_names=dataset.column_names
-            
-        elif data_name.lower()=="moss-sft":
-            logger.info("loading moss-sft.........")
-            dataset=self.__load_moss_sft(datapath)
-            column_names=dataset.column_names
-            map_func=self.generate_multiturn_tokenize
-        
-        elif data_name.lower()=="safetyprompts":
-            logger.info("Loading safetyprompts......")
-            dataset=self.__load_safety_prompts(datapath,field=field)
-            column_names=["type","response","prompt"]
-            
-        elif data_name.lower()=="qiaoban":
-            logger.info("Loading qiaoban........")
-            dataset=self.load_qiaoban_conversation(datapath)
-            map_func=self.__map_qiaoban
-            column_names=dataset.column_names
-        elif data_name.lower()=="smile":
-            logger.info("Loading smile multiturn-conversation..........")
-            dataset=self.__load_smile(datapath)
-            map_func=self.__map_smile
-            column_names=dataset.column_names
-        elif data_name.lower()=="mix_custom":
+        if data_name.lower()=="mix_custom":
              logger.info("Loading Mix Custom multiturn-conversation.............")
-             dataset=self.__load_mix_custom(datapath)
+             dataset=self.__load_jsonlines(datapath)
              map_func=self.__map_mix_custom
              column_names=dataset.column_names
+        elif data_name.lower()=="empathy":
+            logger.info("正在加载单轮对话共情数据.................")
+            dataset=self.__load_jsonlines(datapath)
+            map_func=self.__map_empathy
+            column_names=dataset.column_names
         else:
             raise NotImplementedError
         
         if test_size>0:
-            splitted_dataset=dataset.train_test_split(test_size=test_size,shuffle=False,seed=42) 
-            train_dataset=splitted_dataset["train"].map(map_func,remove_columns=column_names,num_proc=1)
-            valid_dataset=splitted_dataset["test"].map(map_func,remove_columns=column_names,num_proc=1)
+            splitted_dataset=dataset.train_test_split(test_size=test_size,shuffle=True,seed=42) 
+            train_dataset=splitted_dataset["train"].map(map_func,
+                                                        fn_kwargs={"mask":mask,"feedback_token":feedback_token},
+                                                        remove_columns=column_names,
+                                                        num_proc=4)
+            valid_dataset=splitted_dataset["test"].map(map_func,
+                                                       fn_kwargs={"mask":mask,"feedback_token":feedback_token},
+                                                       remove_columns=column_names,
+                                                       num_proc=4)
         else:
-            train_dataset=dataset.map(map_func,remove_columns=column_names,num_proc=1)
+            train_dataset=dataset.map(map_func,
+                                      fn_kwargs={"mask":mask,"feedback_token":feedback_token},
+                                      remove_columns=column_names,num_proc=1).shuffle()
             valid_dataset=None
         return train_dataset,valid_dataset
     
 
 if __name__=="__main__":
-    #model_path="/data/Llama-2-7b-hf"
-    model_path="/data/Baichuan2-7b-chat"
+    model_path="/data/models/chatglm3-6b-32k"
     tokenizer=AutoTokenizer.from_pretrained(model_path,trust_remote_code=True)
-    tokenizer.padding_side="right"
+    #tokenizer.padding_side="right"
     if tokenizer.__class__.__name__ == 'QWenTokenizer':
         tokenizer.pad_token_id = tokenizer.eod_id
         tokenizer.bos_token_id = tokenizer.eod_id
         tokenizer.eos_token_id = tokenizer.eod_id
-    # tokenizer.pad_token_id=tokenizer.unk_token_id
-    # print("eos token id:",tokenizer.eos_token_id)
-    # print("bos token id: ",tokenizer.bos_token_id)
-    #datafile="../data/Safetyprompts/typical_safety_scenarios.json"
-    #datafile="data/sft_data/Moss-sft/moss_tiny.jsonl"
-    #datafile="../data/sft_data/Moss-sft/moss-003-sft-data.jsonl"
-    #datafile="data/sft_data/Qiaoban/child_chat_data.json"
-    #datafile="data/sft_data/smile/train.json"
-    datafile="data/sft_data/Mix_custom/train.jsonl"
-    datagenerator=OpenSourceDataGen(tokenizer,2048,Target_mask=False)
-    train_dataset,cal_dataset=datagenerator.generate_train_test_data(datapath=datafile,test_size=0)
-    # print(len(train_dataset))
-    print(train_dataset[1])
-    print(tokenizer.decode(train_dataset[1]["input_ids"]))
-    print(train_dataset)
-    Dataloader=DL(train_dataset,batch_size=3,collate_fn=transformers.DataCollatorForSeq2Seq(
-           tokenizer=tokenizer,
-           pad_to_multiple_of=8,
-           return_tensors="pt",
-       ))
-    for data in Dataloader:
-        print(data)
-        print(data["input_ids"].shape)
-        break
+    datafile="data/sft_data/Mix_custom/CBT-modified.jsonl"
+    #datafile="data/sft_data/empathy/empathy.jsonl"
+    print("This is eos token"+tokenizer.eos_token)
+    print("This is eos token id: "+str(tokenizer.eos_token_id))
+    datagenerator=OpenSourceDataGen(tokenizer,512)
+    train_dataset,cal_dataset=datagenerator.generate_train_test_data(datapath=datafile,
+                                                                     test_size=0.001,
+                                                                     mask="nomask",
+                                                                     feedback_token=False)
+    print(train_dataset[1]['input_ids'])
+    print(tokenizer.decode(list(train_dataset[1]['input_ids'])))
+    Dataloader=DL(train_dataset,batch_size=3,collate_fn=MultiturnConversationCollatorWithPadding(
+        tokenizer=tokenizer,
+        Max_seq_length=512
+    ))
+    for i,data in enumerate(Dataloader):
+        if i==4:
+            print(data["labels"][0])
+            print(data["input_ids"].shape)
+            break
